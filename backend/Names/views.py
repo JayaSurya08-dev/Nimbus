@@ -12,6 +12,8 @@ from google.auth.transport import requests
 from django.contrib.auth import get_user_model
 from django.conf import settings
 
+
+
 User = get_user_model()
 
 @api_view(['POST'])
@@ -95,17 +97,6 @@ class ResetPasswordView(APIView):
         cache.delete(token)
         return Response({"message": "Password has been reset successfully"})
 
-
-from google.oauth2 import id_token
-from google.auth.transport import requests
-from rest_framework.views import APIView
-from rest_framework.permissions import AllowAny
-from rest_framework.response import Response
-from rest_framework_simplejwt.tokens import RefreshToken
-from django.conf import settings
-from django.contrib.auth import get_user_model
-
-User = get_user_model()
 
 class GoogleAuthView(APIView):
     permission_classes = [AllowAny]
