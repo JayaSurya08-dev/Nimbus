@@ -1,4 +1,6 @@
 # Python/Django
+__pycache__/
+*.pyc
 backend/__pycache__/
 backend/*.pyc
 backend/*.pyo
