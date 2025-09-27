@@ -1,25 +1,26 @@
+// src/components/GoogleLoginButton.jsx
 import React, { useEffect } from "react";
-import axios from "axios";
 import { useNavigate } from "react-router-dom";
+import api from "../api"; 
 
 const GoogleLoginButton = () => {
   const navigate = useNavigate();
 
   const handleCallbackResponse = async (response) => {
     const id_token = response.credential;
+
     try {
-      const res = await axios.post("http://localhost:8000/api/auth/google/", {
-        credential: id_token,
-      });
+      const res = await api.post("auth/google/", { credential: id_token });
+      console.log("Google login successful ✅", res.data.user);
 
-      localStorage.setItem("access", res.data.access);
-      localStorage.setItem("refresh", res.data.refresh);
-      axios.defaults.headers.common["Authorization"] = `Bearer ${res.data.access}`;
-
-      console.log("Login successful ✅", res.data);
-      navigate("/dashboard");
+      // No localStorage needed — cookies are HttpOnly
+      navigate("/dashboard"); // Redirect to dashboard
     } catch (err) {
-      console.error("Login failed ❌", err.response?.data || err);
+      console.error(
+        "Google login failed ❌",
+        err.response?.data?.error || err.message
+      );
+      alert("Google login failed. Please try again.");
     }
   };
 
@@ -39,12 +40,12 @@ const GoogleLoginButton = () => {
       }
     );
 
-    // Style wrapper for exact size
+    // Optional: style wrapper for exact size
     const btnDiv = document.getElementById("googleLoginDiv");
     btnDiv.style.width = "312px";
     btnDiv.style.height = "54px";
     btnDiv.style.borderRadius = "7px";
-    btnDiv.style.overflow = "hidden"; // ensure corners stay rounded
+    btnDiv.style.overflow = "hidden";
   }, []);
 
   return (

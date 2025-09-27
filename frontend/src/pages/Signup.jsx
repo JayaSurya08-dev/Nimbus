@@ -4,6 +4,9 @@ import { useNavigate } from "react-router-dom";
 import "./Signup.css";
 import backgroundImage from "../assets/img2.jpg";
 
+// Enable sending cookies with requests
+axios.defaults.withCredentials = true;
+
 const Signup = () => {
   const [formData, setFormData] = useState({
     username: "",
@@ -31,24 +34,15 @@ const Signup = () => {
     }
 
     try {
-      const res = await axios.post("http://localhost:8000/api/auth/registration/", {
+      await axios.post("http://localhost:8000/api/auth/registration/", {
         username: formData.username,
         email: formData.email,
         password1: formData.password,
         password2: formData.password2,
       });
 
-      // dj-rest-auth returns tokens if REST_USE_JWT=True
-      const { access, refresh } = res.data;
-      if (access && refresh) {
-        localStorage.setItem("access", access);
-        localStorage.setItem("refresh", refresh);
-        axios.defaults.headers.common["Authorization"] = `Bearer ${access}`;
-        navigate("/dashboard"); // direct to dashboard
-      } else {
-        // fallback: if no tokens returned, go to login
-        navigate("/login");
-      }
+      // Successful signup, cookies set automatically
+      navigate("/dashboard"); // redirect to dashboard
     } catch (err) {
       const errorData = err.response?.data;
       setError(

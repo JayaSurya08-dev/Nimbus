@@ -11,6 +11,9 @@ from google.oauth2 import id_token
 from google.auth.transport import requests
 from django.contrib.auth import get_user_model
 from django.conf import settings
+from rest_framework_simplejwt.views import TokenRefreshView
+from django.contrib.auth import authenticate, login, logout
+
 
 
 
@@ -18,19 +21,59 @@ User = get_user_model()
 
 @api_view(['POST'])
 @permission_classes([AllowAny])
-def register(request):
-    username = request.data.get('username')
-    email = request.data.get('email')
-    password = request.data.get('password')
+def register_view(request):
+    serializer = UserSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response({"message": "User registered successfully"}, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    if not username or not password:
-        return Response({'error': 'Username and password are required'}, status=status.HTTP_400_BAD_REQUEST)
 
-    if User.objects.filter(username=username).exists():
-        return Response({'error': 'Username already exists'}, status=status.HTTP_400_BAD_REQUEST)
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login_view(request):
+    email = request.data.get("email")
+    password = request.data.get("password")
 
-    user = User.objects.create_user(username=username, email=email, password=password)
-    return Response({'message': 'User created', 'username': user.username}, status=status.HTTP_201_CREATED)
+    if not email or not password:
+        return Response({"error": "Email and password are required"}, status=400)
+
+    user = authenticate(request, username=email, password=password)
+    if not user:
+        return Response({"error": "Invalid credentials"}, status=401)
+
+    refresh = RefreshToken.for_user(user)
+
+    response = Response({
+        "message": "Login successful",
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "username": user.username,
+            "name": user.get_full_name()
+        }
+    })
+
+    # Set cookies
+    response.set_cookie(
+        key="access_token",
+        value=str(refresh.access_token),
+        httponly=True,
+        secure=True,       # True in production (HTTPS)
+        samesite="Lax",
+        max_age=60*5       # 5 minutes
+    )
+    response.set_cookie(
+        key="refresh_token",
+        value=str(refresh),
+        httponly=True,
+        secure=True,
+        samesite="Lax",
+        max_age=60*60*24*7  # 7 days
+    )
+
+    return response
+
 
 
 @api_view(['GET'])
@@ -48,15 +91,32 @@ class TokenBlacklistView(APIView):
     permission_classes = [IsAuthenticated]
 
     def post(self, request):
-        try:
-            refresh_token = request.data["refresh"]
-            token = RefreshToken(refresh_token)
-            token.blacklist()
-            return Response({"detail": "Successfully logged out."}, status=status.HTTP_205_RESET_CONTENT)
-        except KeyError:
-            return Response({"detail": "Refresh token is required."}, status=status.HTTP_400_BAD_REQUEST)
-        except TokenError:
-            return Response({"detail": "Invalid token."}, status=status.HTTP_400_BAD_REQUEST)
+        response = Response({"detail": "Successfully logged out."}, status=205)
+        response.delete_cookie("access_token")
+        response.delete_cookie("refresh_token")
+        return response
+
+class CookieTokenRefreshView(TokenRefreshView):
+    def post(self, request, *args, **kwargs):
+        refresh = request.COOKIES.get("refresh_token")
+        if not refresh:
+            return Response({"error": "Refresh token missing"}, status=401)
+
+        serializer = self.get_serializer(data={"refresh": refresh})
+        serializer.is_valid(raise_exception=True)
+        access_token = serializer.validated_data["access"]
+
+        response = Response({"message": "Token refreshed"})
+        response.set_cookie(
+            key="access_token",
+            value=access_token,
+            httponly=True,
+            secure=True,
+            samesite="Lax",
+            max_age=60*5
+        )
+        return response
+
 
 class ForgotPasswordView(APIView):
     def post(self, request):
@@ -102,27 +162,15 @@ class GoogleAuthView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request):
-        print("📥 Incoming data:", request.data) 
         credential = request.data.get("credential")
         if not credential:
             return Response({"error": "No credential provided"}, status=400)
 
         try:
-            # Verify token
-            idinfo = id_token.verify_oauth2_token(
-                credential,
-                requests.Request(),
-                settings.GOOGLE_CLIENT_ID
-            )
-            print("✅ Google token verified:", idinfo)
-
+            idinfo = id_token.verify_oauth2_token(credential, requests.Request(), settings.GOOGLE_CLIENT_ID)
             email = idinfo.get("email")
             name = idinfo.get("name", "")
 
-            if not email:
-                return Response({"error": "Email not available"}, status=400)
-
-            # Create or get user
             user, created = User.objects.get_or_create(
                 email=email,
                 defaults={
@@ -132,26 +180,36 @@ class GoogleAuthView(APIView):
                 }
             )
 
-            # Issue JWT tokens
             refresh = RefreshToken.for_user(user)
-
-            return Response({
-                "access": str(refresh.access_token),
-                "refresh": str(refresh),
+            response = Response({
+                "message": "Login successful",
                 "user": {
                     "id": user.id,
                     "email": user.email,
-                    "name": user.get_full_name(),
-                    "username": user.username
-                },
+                    "username": user.username,
+                    "name": user.get_full_name()
+                }
             })
 
+            # Set cookies
+            response.set_cookie(
+                key="access_token",
+                value=str(refresh.access_token),
+                httponly=True,
+                secure=True,
+                samesite="Lax",
+                max_age=60*5
+            )
+            response.set_cookie(
+                key="refresh_token",
+                value=str(refresh),
+                httponly=True,
+                secure=True,
+                samesite="Lax",
+                max_age=60*60*24*7
+            )
+
+            return response
+
         except Exception as e:
-            print("❌ Google auth error:", e)
-            try:
-                unverified = id_token.verify_oauth2_token(credential, requests.Request())
-                print("🔍 Token audience:", unverified.get("aud"))
-                print("🔍 Expected client ID:", settings.GOOGLE_CLIENT_ID)
-            except Exception:
-                print("⚠️ Could not even decode token")
             return Response({"error": str(e)}, status=400)

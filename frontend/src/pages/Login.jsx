@@ -2,6 +2,7 @@ import { useState } from "react";
 import axios from "axios";
 import { useNavigate } from "react-router-dom";
 import './Login.css';
+import api from "../api"; 
 import backgroundImage from "../assets/img2.jpg";
 import GoogleLoginButton from "./GoogleLoginButton"; // Make sure this component is implemented
 
@@ -13,28 +14,30 @@ const Login = () => {
   const navigate = useNavigate();
 
   const handleLogin = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError("");
+  e.preventDefault();
+  setLoading(true);
+  setError("");
 
-    try {
-      const response = await axios.post("http://localhost:8000/api/login/", {
-        username,
-        password,
-      });
+  try {
+    const response = await api.post("login/", {
+      email: username, // backend expects 'email'
+      password,
+    });
 
-      const { access, refresh } = response.data;
-      localStorage.setItem("access", access);
-      localStorage.setItem("refresh", refresh);
+    // Success, backend has set HttpOnly cookies
+    console.log("Login success:", response.data.user);
 
-      axios.defaults.headers.common["Authorization"] = `Bearer ${access}`;
-      navigate("/dashboard"); // Redirect after login
+    navigate("/dashboard"); // redirect to dashboard
     } catch (err) {
-      setError("Invalid credentials");
+      setError(
+        err.response?.data?.non_field_errors?.[0] || "Invalid credentials"
+      );
     } finally {
       setLoading(false);
     }
   };
+
+
 
   return (
     <div className="login-wrapper">

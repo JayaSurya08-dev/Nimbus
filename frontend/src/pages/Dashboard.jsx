@@ -1,5 +1,6 @@
+// src/components/Dashboard.jsx
 import { useEffect, useState } from "react";
-import axios from "axios";
+import api from "../api"; // Axios instance with withCredentials: true
 
 export default function Dashboard() {
   const [files, setFiles] = useState([]);
@@ -7,46 +8,21 @@ export default function Dashboard() {
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // ✅ Use correct access token key
-  const token = localStorage.getItem("access");
+  // Axios instance with cookies
+  const axiosInstance = api;
 
-  // Redirect to login if not logged in
-  if (!token) {
-    return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="bg-white p-8 rounded-lg shadow">
-          <h2 className="text-xl font-bold mb-4">Authentication Required</h2>
-          <p>Please log in to access your files.</p>
-          <button
-            onClick={() => (window.location.href = "/login")}
-            className="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg"
-          >
-            Go to Login
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // ✅ Axios instance with Authorization header
-  const api = axios.create({
-    baseURL: "http://localhost:8000",
-    headers: { Authorization: `Bearer ${token}` },
-  });
-
-  // ✅ Interceptor to handle token expiry / 401
-  api.interceptors.response.use(
+  // Handle 401 globally
+  axiosInstance.interceptors.response.use(
     (response) => response,
     (error) => {
       if (error.response?.status === 401) {
-        localStorage.removeItem("access");
         window.location.href = "/login";
       }
       return Promise.reject(error);
     }
   );
 
-  // Fetch files on component mount
+  // Fetch files on mount
   useEffect(() => {
     fetchFiles();
   }, []);
@@ -55,7 +31,7 @@ export default function Dashboard() {
     try {
       setLoading(true);
       setError(null);
-      const res = await api.get("/api/files/");
+      const res = await axiosInstance.get("files/");
       setFiles(res.data);
     } catch (err) {
       console.error("Error fetching files:", err);
@@ -75,10 +51,9 @@ export default function Dashboard() {
 
     try {
       setError(null);
-      // ✅ Let Axios handle Content-Type automatically
-      await api.post("/api/upload/", formData);
+      await axiosInstance.post("upload/", formData);
       setSelectedFile(null);
-      fetchFiles(); // refresh file list
+      fetchFiles();
     } catch (err) {
       console.error("Upload error:", err);
       if (err.response?.status !== 401) {
@@ -87,25 +62,26 @@ export default function Dashboard() {
     }
   };
 
-  const handleDownload = (id) => {
-    // ✅ Download via Authorization header is better than token query param
-    const downloadWindow = window.open("", "_blank");
-    api
-      .get(`/api/download/${id}/`, { responseType: "blob" })
-      .then((res) => {
-        const url = window.URL.createObjectURL(new Blob([res.data]));
-        downloadWindow.location.href = url;
-      })
-      .catch((err) => {
-        console.error("Download error:", err);
-        downloadWindow.close();
-      });
+  const handleDownload = async (id) => {
+    try {
+      const res = await axiosInstance.get(`download/${id}/`, { responseType: "blob" });
+      const url = window.URL.createObjectURL(new Blob([res.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", "file");
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+    } catch (err) {
+      console.error("Download error:", err);
+      setError("Failed to download file.");
+    }
   };
 
   const handleDelete = async (id) => {
     try {
       setError(null);
-      await api.delete(`/api/delete/${id}/`);
+      await axiosInstance.delete(`delete/${id}/`);
       setFiles(files.filter((f) => f.id !== id));
     } catch (err) {
       console.error("Delete error:", err);
@@ -115,10 +91,20 @@ export default function Dashboard() {
     }
   };
 
+  const handleLogout = async () => {
+    try {
+      await axiosInstance.post("logout/");
+    } catch (err) {
+      console.error("Logout failed:", err);
+    } finally {
+      window.location.href = "/login";
+    }
+  };
+
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-100 flex items-center justify-center">
-        <div className="text-lg">Loading...</div>
+      <div className="min-h-screen flex items-center justify-center">
+        <div>Loading...</div>
       </div>
     );
   }
@@ -131,10 +117,7 @@ export default function Dashboard() {
         <div className="flex items-center space-x-4">
           <button className="text-gray-700">Dashboard</button>
           <button
-            onClick={() => {
-              localStorage.removeItem("access");
-              window.location.href = "/login";
-            }}
+            onClick={handleLogout}
             className="text-gray-700 hover:text-red-600"
           >
             Logout
@@ -188,9 +171,7 @@ export default function Dashboard() {
               {files.map((file) => (
                 <tr key={file.id} className="border-b">
                   <td className="px-6 py-3">{file.name}</td>
-                  <td className="px-6 py-3">
-                    {(file.size / 1024).toFixed(2)} KB
-                  </td>
+                  <td className="px-6 py-3">{(file.size / 1024).toFixed(2)} KB</td>
                   <td className="px-6 py-3">{file.uploaded_at}</td>
                   <td className="px-6 py-3 flex space-x-3">
                     <button
