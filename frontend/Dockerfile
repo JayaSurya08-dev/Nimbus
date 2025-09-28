@@ -1,27 +1,20 @@
-FROM node:22.12.0
+# Use official Node image
+FROM node:20-alpine
 
+# Set working directory
 WORKDIR /app
 
-# Copy only package.json first for better caching
-COPY package.json package-lock.json ./
+# Copy package.json and package-lock.json first (better caching)
+COPY package*.json ./
 
 # Install dependencies
 RUN npm install
 
-# Install Vite globally (not strictly needed, but fine)
-RUN npm install -g vite
-
-# Copy the rest of the app
+# Copy the rest of the code
 COPY . .
 
-# If you don’t already have Tailwind setup, run this once.
-# Better: create tailwind.config.js & postcss.config.js manually, not here.
-# RUN npx tailwindcss init -p  
-
-# Fix file permissions
-RUN chmod -R 755 /app
-
+# Expose port (default Vite port is 5173)
 EXPOSE 5173
 
-# Default command: start dev server
-CMD ["npm", "run", "dev"]
+# Start the dev server
+CMD ["npm", "run", "dev", "--", "--host"]

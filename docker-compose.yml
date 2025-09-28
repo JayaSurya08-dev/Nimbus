@@ -37,7 +37,6 @@ services:
     tty: true
     env_file:
       - .env
-    # For now, let it run as root to avoid node_modules permission issues
     networks:
       - cloudnet
 
