@@ -14,8 +14,13 @@ from pathlib import Path
 from datetime import timedelta
 import os
 from dotenv import load_dotenv
+# from dotenv import dotenv_values
+from supabase import create_client, Client
+
 
 load_dotenv()
+#env = dotenv_values()
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -32,6 +37,7 @@ ALLOWED_HOSTS = ['*']
 
 
 # Application definition
+
 
 INSTALLED_APPS = [
     'django.contrib.admin',
@@ -148,6 +154,7 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 MEDIA_URL='/media/'
 MEDIA_ROOT=os.path.join(BASE_DIR,'media')
+
 
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (

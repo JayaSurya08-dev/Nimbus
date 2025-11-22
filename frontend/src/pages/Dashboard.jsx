@@ -1,28 +1,37 @@
-// src/components/Dashboard.jsx
 import { useEffect, useState } from "react";
-import api from "../api"; // Axios instance with withCredentials: true
+import api from "../api";
+import logo from "../assets/logo.png";
 
 export default function Dashboard() {
   const [files, setFiles] = useState([]);
   const [selectedFile, setSelectedFile] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [username, setUsername] = useState("");
 
-  // Axios instance with cookies
+  useEffect(() => {
+    const fetchProfile = async () => {
+      try {
+        const res = await api.get("profile/");
+        setUsername(res.data.username);
+      } catch {
+        setUsername("Guest");
+      }
+    };
+    fetchProfile();
+  }, []);
+
   const axiosInstance = api;
 
-  // Handle 401 globally
   axiosInstance.interceptors.response.use(
-    (response) => response,
-    (error) => {
-      if (error.response?.status === 401) {
-        window.location.href = "/login";
-      }
-      return Promise.reject(error);
+    (res) => res,
+    (err) => {
+      if (err.response?.status === 401) window.location.href = "/login";
+      return Promise.reject(err);
     }
   );
 
-  // Fetch files on mount
   useEffect(() => {
     fetchFiles();
   }, []);
@@ -33,11 +42,8 @@ export default function Dashboard() {
       setError(null);
       const res = await axiosInstance.get("files/");
       setFiles(res.data);
-    } catch (err) {
-      console.error("Error fetching files:", err);
-      if (err.response?.status !== 401) {
-        setError("Failed to load files. Please try again.");
-      }
+    } catch {
+      setError("Failed to load files.");
     } finally {
       setLoading(false);
     }
@@ -45,111 +51,114 @@ export default function Dashboard() {
 
   const handleUpload = async () => {
     if (!selectedFile) return;
-
     const formData = new FormData();
     formData.append("file", selectedFile);
-
     try {
-      setError(null);
       await axiosInstance.post("upload/", formData);
       setSelectedFile(null);
       fetchFiles();
-    } catch (err) {
-      console.error("Upload error:", err);
-      if (err.response?.status !== 401) {
-        setError("Upload failed. Please try again.");
-      }
+    } catch {
+      setError("Upload failed.");
     }
   };
 
-  const handleDownload = async (id) => {
+  const handleDownload = async (id, name) => {
     try {
       const res = await axiosInstance.get(`download/${id}/`, { responseType: "blob" });
       const url = window.URL.createObjectURL(new Blob([res.data]));
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", "file");
+      link.setAttribute("download", name || "file");
       document.body.appendChild(link);
       link.click();
       link.remove();
-    } catch (err) {
-      console.error("Download error:", err);
-      setError("Failed to download file.");
+    } catch {
+      setError("Download failed.");
     }
   };
 
   const handleDelete = async (id) => {
+    const confirmDelete = window.confirm("Are you sure you want to delete this file?");
+    if (!confirmDelete) return;
     try {
-      setError(null);
       await axiosInstance.delete(`delete/${id}/`);
       setFiles(files.filter((f) => f.id !== id));
-    } catch (err) {
-      console.error("Delete error:", err);
-      if (err.response?.status !== 401) {
-        setError("Delete failed. Please try again.");
-      }
+    } catch {
+      setError("Delete failed.");
     }
   };
 
   const handleLogout = async () => {
     try {
       await axiosInstance.post("logout/");
-    } catch (err) {
-      console.error("Logout failed:", err);
-    } finally {
+    } catch {}
+    finally {
       window.location.href = "/login";
     }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div>Loading...</div>
+      <div className="min-h-screen flex items-center justify-center text-white bg-gray-900">
+        Loading...
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-screen bg-gray-900 text-white">
       {/* Navbar */}
-      <nav className="bg-white shadow px-6 py-4 flex justify-between items-center">
-        <h1 className="text-xl font-bold">MyCloud</h1>
-        <div className="flex items-center space-x-4">
-          <button className="text-gray-700">Dashboard</button>
-          <button
-            onClick={handleLogout}
-            className="text-gray-700 hover:text-red-600"
-          >
-            Logout
-          </button>
+      <nav className="bg-gray-800 px-4 sm:px-6 py-2 flex flex-wrap justify-between items-center shadow-md">
+        <img src={logo} alt="Logo" className="w-[200px] h-[71px] cursor-pointer" />
+        <div className="relative">
           <img
             src="/avatar.png"
             alt="user"
-            className="w-8 h-8 rounded-full cursor-pointer"
+            className="w-10 h-10 rounded-full cursor-pointer border-2 border-gray-600"
+            onClick={() => setMenuOpen(!menuOpen)}
           />
+          {menuOpen && (
+            <div className="absolute right-0 mt-2 w-40 bg-gray-800 border border-gray-700 shadow-lg rounded-md z-50">
+              <div className="px-4 py-4 text-sm font-semibold text-gray-300 border-b border-gray-700">
+                {username}
+              </div>
+              <button
+                onClick={() => window.location.href = "/profile"}
+                className="block w-full text-left px-4 py-2 hover:bg-gray-700"
+              >
+                Profile
+              </button>
+              <button
+                onClick={handleLogout}
+                className="block w-full text-left px-4 py-2 hover:bg-red-700 hover:text-red-300"
+              >
+                Logout
+              </button>
+            </div>
+          )}
         </div>
       </nav>
 
       {/* Content */}
-      <div className="max-w-6xl mx-auto p-6">
+      <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
         {error && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+          <div className="bg-red-800 border border-red-600 text-red-300 px-4 py-3 rounded mb-4">
             {error}
           </div>
         )}
 
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-semibold">Your Files</h2>
-          <div className="flex space-x-2">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center mb-4 gap-4">
+          <h2 className="text-xl font-semibold">Your Files</h2>
+          <div className="flex flex-col sm:flex-row gap-2">
             <input
               type="file"
               onChange={(e) => setSelectedFile(e.target.files[0])}
-              className="text-sm"
+              className="text-sm text-gray-200 bg-gray-800 border border-gray-600 rounded px-2 py-1"
             />
             <button
               onClick={handleUpload}
               disabled={!selectedFile}
-              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 disabled:bg-gray-400"
+              className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-500 disabled:bg-gray-700"
             >
               Upload
             </button>
@@ -157,41 +166,42 @@ export default function Dashboard() {
         </div>
 
         {/* File Table */}
-        <div className="bg-white rounded-lg shadow overflow-hidden">
-          <table className="w-full">
-            <thead className="bg-gray-50 border-b">
+        <div className="bg-gray-800 rounded-lg shadow overflow-x-auto">
+          <table className="min-w-full">
+            <thead className="bg-gray-700 border-b border-gray-600">
               <tr>
-                <th className="text-left px-6 py-3">Name</th>
-                <th className="text-left px-6 py-3">Size</th>
-                <th className="text-left px-6 py-3">Uploaded</th>
-                <th className="px-6 py-3">Actions</th>
+                <th className="text-left px-4 sm:px-6 py-3 text-sm sm:text-base">Name</th>
+                <th className="text-left px-4 sm:px-6 py-3 text-sm sm:text-base">Size</th>
+                <th className="text-left px-4 sm:px-6 py-3 text-sm sm:text-base">Uploaded</th>
+                <th className="px-4 sm:px-6 py-3 text-sm sm:text-base">Actions</th>
               </tr>
             </thead>
             <tbody>
-              {files.map((file) => (
-                <tr key={file.id} className="border-b">
-                  <td className="px-6 py-3">{file.name}</td>
-                  <td className="px-6 py-3">{(file.size / 1024).toFixed(2)} KB</td>
-                  <td className="px-6 py-3">{file.uploaded_at}</td>
-                  <td className="px-6 py-3 flex space-x-3">
-                    <button
-                      onClick={() => handleDownload(file.id)}
-                      className="text-blue-600 hover:underline"
-                    >
-                      Download
-                    </button>
-                    <button
-                      onClick={() => handleDelete(file.id)}
-                      className="text-red-600 hover:underline"
-                    >
-                      Delete
-                    </button>
-                  </td>
-                </tr>
-              ))}
-              {files.length === 0 && (
+              {files.length > 0 ? (
+                files.map((file) => (
+                  <tr key={file.id} className="border-b border-gray-700">
+                    <td className="px-4 sm:px-6 py-3 text-sm">{file.name}</td>
+                    <td className="px-4 sm:px-6 py-3 text-sm">{(file.size / 1024).toFixed(2)} KB</td>
+                    <td className="px-4 sm:px-6 py-3 text-sm">{file.uploaded_at}</td>
+                    <td className="px-4 sm:px-6 py-3 flex flex-wrap gap-2">
+                      <button
+                        onClick={() => handleDownload(file.id, file.name)}
+                        className="text-blue-400 hover:underline"
+                      >
+                        Download
+                      </button>
+                      <button
+                        onClick={() => handleDelete(file.id)}
+                        className="text-red-500 hover:underline"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              ) : (
                 <tr>
-                  <td colSpan="4" className="text-center py-6 text-gray-500">
+                  <td colSpan="4" className="text-center py-6 text-gray-400">
                     No files uploaded yet
                   </td>
                 </tr>
